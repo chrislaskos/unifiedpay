@@ -67,6 +67,11 @@ return [
             'model' => env('AUTH_MODEL', User::class),
         ],
 
+        'merchants' => [
+    'driver' => 'eloquent',
+    'model' => App\Models\Merchant::class,
+],
+
         // 'users' => [
         //     'driver' => 'database',
         //     'table' => 'users',
@@ -98,6 +103,10 @@ return [
             'table' => env('AUTH_PASSWORD_RESET_TOKEN_TABLE', 'password_reset_tokens'),
             'expire' => 60,
             'throttle' => 60,
+        ],
+        'merchants' => [
+            'driver' => 'eloquent',
+            'model' => App\Models\Merchant::class,
         ],
     ],
 
