@@ -35,4 +35,7 @@ return [
         ],
     ],
 
+    'stripe' => [
+        'api_version' => env('STRIPE_API_VERSION'),
+    ],
 ];

@@ -7,6 +7,8 @@ namespace App\Http\Controllers;
 use App\Http\Requests\StoreChargeRequest;
 use App\Models\Merchant;
 use App\Payments\ChargePayment;
+use App\Payments\Enums\PaymentFailureReason;
+use App\Payments\Exceptions\PaymentFailed;
 use App\Payments\Exceptions\PaymentGatewayUnavailable;
 use Illuminate\Http\JsonResponse;
 
@@ -14,8 +16,7 @@ final class ChargeController extends Controller
 {
     public function __construct(
         private readonly ChargePayment $chargePayment,
-    ) {
-    }
+    ) {}
 
     /**
      * Handle the incoming request.
@@ -32,12 +33,11 @@ final class ChargeController extends Controller
                 $request->toChargeRequest(),
             );
         } catch (PaymentGatewayUnavailable) {
-            return response()->json([
-                'error' => [
-                    'code' => 'PAYMENT_PROVIDER_UNAVAILABLE',
-                    'message' => 'The payment provider is not configured.',
-                ],
-            ], 503);
+            return $this->failureResponse(
+                PaymentFailureReason::ProviderUnavailable,
+            );
+        } catch (PaymentFailed $exception) {
+            return $this->failureResponse($exception->reason);
         }
 
         return response()->json([
@@ -48,5 +48,16 @@ final class ChargeController extends Controller
                 'currency' => $result->money->currency,
             ],
         ], 201);
+    }
+
+    private function failureResponse(
+        PaymentFailureReason $reason,
+    ): JsonResponse {
+        return response()->json([
+            'error' => [
+                'code' => $reason->value,
+                'message' => $reason->message(),
+            ],
+        ], $reason->httpStatus());
     }
 }

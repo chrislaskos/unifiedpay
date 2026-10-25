@@ -4,11 +4,13 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
-use App\Enums\PaymentProvider;
 use App\Models\Merchant;
 use App\Payments\ChargeRequest;
 use App\Payments\ChargeResult;
 use App\Payments\Contracts\PaymentGateway;
+use App\Payments\Enums\PaymentFailureReason;
+use App\Payments\Enums\PaymentProvider;
+use App\Payments\Exceptions\PaymentFailed;
 use App\Payments\PaymentGatewayResolver;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -98,7 +100,7 @@ class CreateChargeTest extends TestCase
         $this->app->instance(
             PaymentGatewayResolver::class,
             new PaymentGatewayResolver([
-                'stripe' => fn (Merchant $merchant): PaymentGateway => $gateway,
+                'stripe' => fn(Merchant $merchant): PaymentGateway => $gateway,
             ]),
         );
 
@@ -153,14 +155,48 @@ class CreateChargeTest extends TestCase
 
     public function test_an_unconfigured_provider_returns_503(): void
     {
+        $this->app->instance(
+            PaymentGatewayResolver::class,
+            new PaymentGatewayResolver([]),
+        );
+
         $this->authenticate($this->merchant());
 
         $this->postJson('/api/charge', $this->payload())
             ->assertStatus(503)
             ->assertJsonPath(
                 'error.code',
-                'PAYMENT_PROVIDER_UNAVAILABLE',
+                PaymentFailureReason::ProviderUnavailable->value,
             );
+    }
+
+    public function test_an_unknown_payment_outcome_returns_a_numeric_error(): void
+    {
+        $reason = PaymentFailureReason::OutcomeUnknown;
+
+        $gateway = $this->createMock(PaymentGateway::class);
+
+        $gateway->expects(self::once())
+            ->method('charge')
+            ->willThrowException(new PaymentFailed($reason));
+
+        $this->app->instance(
+            PaymentGatewayResolver::class,
+            new PaymentGatewayResolver([
+                'stripe' => fn(Merchant $merchant): PaymentGateway => $gateway,
+            ]),
+        );
+
+        $this->authenticate($this->merchant());
+
+        $this->postJson('/api/charge', $this->payload())
+            ->assertStatus(502)
+            ->assertExactJson([
+                'error' => [
+                    'code' => $reason->value,
+                    'message' => $reason->message(),
+                ],
+            ]);
     }
 
     private function authenticate(Merchant $merchant): void
